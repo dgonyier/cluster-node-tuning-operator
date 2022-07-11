@@ -127,18 +127,36 @@ func (r *PerformanceProfile) validateCPUs() field.ErrorList {
 		}
 
 		if r.Spec.CPU.Isolated != nil && r.Spec.CPU.Reserved != nil {
-			cpuLists, err := components.NewCPULists(string(*r.Spec.CPU.Reserved), string(*r.Spec.CPU.Isolated))
+			var offlined string
+			if r.Spec.CPU.Offlined != nil {
+				offlined = string(*r.Spec.CPU.Offlined)
+			}
+
+			cpuLists, err := components.NewCPULists(string(*r.Spec.CPU.Reserved), string(*r.Spec.CPU.Isolated), offlined)
 			if err != nil {
 				allErrs = append(allErrs, field.InternalError(field.NewPath("spec.cpu"), err))
 			}
 
 			if cpuLists != nil {
-				if cpuLists.CountIsolated() == 0 {
+				if cpuLists.GetReserved().IsEmpty() {
+					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.cpu.reserved"), r.Spec.CPU.Reserved, "reserved CPUs can not be empty"))
+				}
+
+				if cpuLists.GetIsolated().IsEmpty() {
 					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.cpu.isolated"), r.Spec.CPU.Isolated, "isolated CPUs can not be empty"))
 				}
 
-				if overlap := cpuLists.Intersect(); len(overlap) != 0 {
+				if overlap := components.Intersect(cpuLists.GetIsolated(), cpuLists.GetReserved()); len(overlap) != 0 {
 					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.cpu"), r.Spec.CPU, fmt.Sprintf("reserved and isolated cpus overlap: %v", overlap)))
+				}
+			}
+
+			if r.Spec.CPU.Offlined != nil {
+				if overlap := components.Intersect(cpuLists.GetReserved(), cpuLists.GetOfflined()); len(overlap) != 0 {
+					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.cpu"), r.Spec.CPU, fmt.Sprintf("reserved and offlined cpus overlap: %v", overlap)))
+				}
+				if overlap := components.Intersect(cpuLists.GetIsolated(), cpuLists.GetOfflined()); len(overlap) != 0 {
+					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.cpu"), r.Spec.CPU, fmt.Sprintf("isolated and offlined cpus overlap: %v", overlap)))
 				}
 			}
 		}

@@ -26,6 +26,10 @@ import (
 // objects.
 const PerformanceProfilePauseAnnotation = "performance.openshift.io/pause-reconcile"
 
+// PerformanceProfileEnableRpsAnnotation enables RPS mask setting with systemd for all
+// network devices by including physical interfaces from netdev-rps rule.
+const PerformanceProfileEnableRpsAnnotation = "performance.openshift.io/enable-physical-dev-rps"
+
 // PerformanceProfileSpec defines the desired state of PerformanceProfile.
 type PerformanceProfileSpec struct {
 	// CPU defines a set of CPU related parameters.
@@ -98,6 +102,9 @@ type CPU struct {
 	// Defaults to "true"
 	// +optional
 	BalanceIsolated *bool `json:"balanceIsolated,omitempty"`
+	// Offline defines a set of CPUs that will be unused and set offline
+	// +optional
+	Offlined *CPUSet `json:"offlined,omitempty"`
 }
 
 // HugePageSize defines size of huge pages, can be 2M or 1G.

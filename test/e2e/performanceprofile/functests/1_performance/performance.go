@@ -32,6 +32,7 @@ import (
 	"github.com/openshift/cluster-node-tuning-operator/pkg/performanceprofile/controller/performanceprofile/components"
 	"github.com/openshift/cluster-node-tuning-operator/pkg/performanceprofile/controller/performanceprofile/components/machineconfig"
 	componentprofile "github.com/openshift/cluster-node-tuning-operator/pkg/performanceprofile/controller/performanceprofile/components/profile"
+	profileutil "github.com/openshift/cluster-node-tuning-operator/pkg/performanceprofile/controller/performanceprofile/components/profile"
 	testutils "github.com/openshift/cluster-node-tuning-operator/test/e2e/performanceprofile/functests/utils"
 	testclient "github.com/openshift/cluster-node-tuning-operator/test/e2e/performanceprofile/functests/utils/client"
 	"github.com/openshift/cluster-node-tuning-operator/test/e2e/performanceprofile/functests/utils/cluster"
@@ -327,7 +328,12 @@ var _ = Describe("[rfe_id:27368][performance]", func() {
 				Expect(rpsCPUs).To(Equal(expectedRPSCPUs), "the service rps mask is different from the reserved CPUs")
 
 				// Verify all host network devices have the correct RPS mask
-				cmd = []string{"find", "/rootfs/sys/devices", "-type", "f", "-name", "rps_cpus", "-exec", "cat", "{}", ";"}
+				if profileutil.IsRpsEnabled(profile) {
+					cmd = []string{"find", "/rootfs/sys/devices", "-type", "f", "-name", "rps_cpus", "-exec", "cat", "{}", ";"}
+				} else {
+					cmd = []string{"find", "/rootfs/sys/devices/virtual", "-type", "f", "-name", "rps_cpus", "-exec", "cat", "{}", ";"}
+				}
+
 				devsRPS, err := nodes.ExecCommandOnNode(cmd, &node)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -347,7 +353,7 @@ var _ = Describe("[rfe_id:27368][performance]", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				for _, pod := range nodePods.Items {
-					cmd := []string{"find", "/sys/devices", "-type", "f", "-name", "rps_cpus", "-exec", "cat", "{}", ";"}
+					cmd := []string{"find", "/sys/devices/virtual", "-type", "f", "-name", "rps_cpus", "-exec", "cat", "{}", ";"}
 					devsRPS, err := pods.WaitForPodOutput(testclient.K8sClient, &pod, cmd)
 					for _, devRPS := range strings.Split(strings.Trim(string(devsRPS), "\n"), "\n") {
 						rpsCPUs, err = components.CPUMaskToCPUSet(devRPS)
@@ -1271,35 +1277,6 @@ func verifyV2Conversion(v2Profile *performancev2.PerformanceProfile, v1Profile *
 			if *specNUMA.TopologyPolicy != *v1Profile.Spec.NUMA.TopologyPolicy {
 				return fmt.Errorf("topologyPolicy field is different [v2: %s, v1: %s]",
 					*specNUMA.TopologyPolicy, *v1Profile.Spec.NUMA.TopologyPolicy)
-			}
-		}
-	}
-
-	specWorkloadHints := v2Profile.Spec.WorkloadHints
-	if (specWorkloadHints == nil) != (v1Profile.Spec.WorkloadHints == nil) {
-		return fmt.Errorf("spec workloadHints field is different")
-	}
-
-	if specWorkloadHints != nil {
-		if (specWorkloadHints.HighPowerConsumption == nil) != (v1Profile.Spec.WorkloadHints.HighPowerConsumption == nil) {
-			return fmt.Errorf("spec workloadHints powerSaving field is different")
-		}
-
-		if specWorkloadHints.HighPowerConsumption != nil {
-			if *specWorkloadHints.HighPowerConsumption != *v1Profile.Spec.WorkloadHints.HighPowerConsumption {
-				return fmt.Errorf("PowerSaving field is different [v2: %t, v1: %t]",
-					*specWorkloadHints.HighPowerConsumption, *v1Profile.Spec.WorkloadHints.HighPowerConsumption)
-			}
-		}
-
-		if (specWorkloadHints.RealTime == nil) != (v1Profile.Spec.WorkloadHints.RealTime == nil) {
-			return fmt.Errorf("spec workloadHints realTime field is different")
-		}
-
-		if specWorkloadHints.RealTime != nil {
-			if *specWorkloadHints.RealTime != *v1Profile.Spec.WorkloadHints.RealTime {
-				return fmt.Errorf("RealTime field is different [v2: %t, v1: %t]",
-					*specWorkloadHints.RealTime, *v1Profile.Spec.WorkloadHints.RealTime)
 			}
 		}
 	}
